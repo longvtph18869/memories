@@ -1,6 +1,6 @@
 import { ListObjectsV2Command } from '@aws-sdk/client-s3';
 import { NextResponse } from 'next/server';
-import { s3Client, R2_BUCKET_NAME, R2_PUBLIC_URL } from '@/lib/s3';
+import { s3Client, S3_BUCKET_NAME, S3_PUBLIC_URL } from '@/lib/s3';
 
 const buildProxySrc = (key: string) =>
     `/api/images/proxy?${new URLSearchParams({ key }).toString()}`;
@@ -19,7 +19,7 @@ export async function GET() {
         // Fetch all objects (handles pagination automatically)
         do {
             const command = new ListObjectsV2Command({
-                Bucket: R2_BUCKET_NAME,
+                Bucket: S3_BUCKET_NAME,
                 MaxKeys: 1000,
                 ContinuationToken: continuationToken,
             });
@@ -40,7 +40,7 @@ export async function GET() {
                     const key = obj.Key || '';
                     return {
                         src: buildProxySrc(key),
-                        originSrc: `${R2_PUBLIC_URL}/${key}`,
+                        originSrc: `${S3_PUBLIC_URL}/${key}`,
                         alt: key,
                         key,
                         size: obj.Size,

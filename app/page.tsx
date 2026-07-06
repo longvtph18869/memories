@@ -4,7 +4,6 @@ import { useState, useEffect } from "react"
 import Image from "next/image"
 import InfiniteGallery from "@/components/gallery/InfiniteGallery"
 import { BottomNav } from "@/components/ui/bottom-nav"
-import { UploadDialog } from "@/components/ui/upload-dialog"
 import { InfoPanel } from "@/components/ui/info-panel"
 import { ImageItem } from "@/types"
 
@@ -25,7 +24,6 @@ export default function Home() {
   const [showGallery, setShowGallery] = useState(false)
   const [galleryOpacity, setGalleryOpacity] = useState(0)
 
-  const [uploadOpen, setUploadOpen] = useState(false)
   const [infoOpen, setInfoOpen] = useState(false)
   const [isGridView, setIsGridView] = useState(false)
 
@@ -77,7 +75,7 @@ export default function Home() {
     return (
       <main className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
-          <p className="text-[11px] uppercase tracking-[0.3em] text-foreground-muted mb-2">Loading memories...</p>
+          <p className="text-[11px] uppercase tracking-[0.3em] text-foreground-muted mb-2">Đang tải kỷ niệm...</p>
           {totalCount > 0 && (
             <p className="text-[10px] font-mono text-foreground-muted/60">
               {loadedCount} / {totalCount}
@@ -92,15 +90,8 @@ export default function Home() {
     return (
       <main className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center space-y-4">
-          <p className="text-[11px] uppercase tracking-[0.3em] text-foreground-muted">No memories yet</p>
-          <button
-            onClick={() => setUploadOpen(true)}
-            className="px-4 py-2 text-[11px] uppercase tracking-wider border border-border hover:bg-border/50 transition-colors text-foreground"
-          >
-            Upload First Memory
-          </button>
+          <p className="text-[11px] uppercase tracking-[0.3em] text-foreground-muted">Chưa có kỷ niệm nào</p>
         </div>
-        <UploadDialog open={uploadOpen} onClose={() => setUploadOpen(false)} />
       </main>
     )
   }
@@ -112,7 +103,7 @@ export default function Home() {
           }`}
       >
         <div className="text-center">
-          <p className="text-[11px] uppercase tracking-[0.3em] text-foreground-muted mb-2">Loading memories...</p>
+          <p className="text-[11px] uppercase tracking-[0.3em] text-foreground-muted mb-2">Đang tải kỷ niệm...</p>
           {totalCount > 0 && (
             <p className="text-[10px] font-mono text-foreground-muted/60">
               {loadedCount} / {totalCount}
@@ -158,24 +149,20 @@ export default function Home() {
 
       {/* Photo count indicator */}
       <div className="fixed top-6 right-6 text-[10px] uppercase tracking-wider text-foreground-muted bg-background/80 backdrop-blur-sm px-3 py-2 border border-border">
-        <span className="text-foreground">{images.length}</span> memories
+        <span className="text-foreground">{images.length}</span> kỷ niệm
       </div>
 
       {/* Title */}
       <div className="fixed top-6 left-6 text-[10px] uppercase tracking-wider text-foreground-muted bg-background/80 backdrop-blur-sm px-3 py-2 border border-border">
-        <span className="text-foreground">class of 2026</span>
+        <span className="text-foreground">niên khóa 2026</span>
       </div>
 
       {/* Bottom navigation */}
       <BottomNav
-        onUploadClick={() => setUploadOpen(true)}
         onInfoClick={() => setInfoOpen(true)}
         onGridClick={() => setIsGridView(!isGridView)}
         isGridView={isGridView}
       />
-
-      {/* Upload dialog */}
-      <UploadDialog open={uploadOpen} onClose={() => setUploadOpen(false)} />
 
       {/* Info panel */}
       <InfoPanel open={infoOpen} onClose={() => setInfoOpen(false)} imageCount={images.length} />

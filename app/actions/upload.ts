@@ -1,78 +1,50 @@
 "use server"
 
 import { UploadResult } from "@/types";
+import { cookies } from "next/headers";
+import { PutObjectCommand } from '@aws-sdk/client-s3';
+import { s3Client, S3_BUCKET_NAME } from '@/lib/s3';
 
-export async function uploadToDiscord(formData: FormData): Promise<UploadResult> {
-    const webhookUrl = process.env.DISCORD_WEBHOOK_URL
-
-    if (!webhookUrl) {
-        return { success: false, error: "Discord webhook not configured" }
+export async function uploadImage(formData: FormData): Promise<UploadResult> {
+    const cookieStore = await cookies()
+    const isAdmin = cookieStore.get("admin_session")?.value === "true"
+    
+    if (!isAdmin) {
+        return { success: false, error: "Unauthorized access" }
     }
 
-    const author = formData.get("author") as string
+    if (!S3_BUCKET_NAME) {
+        return { success: false, error: "Chưa cấu hình Storage Bucket" }
+    }
+
     const caption = formData.get("caption") as string
     const imageFile = formData.get("image") as File
 
-    if (!author || !imageFile) {
-        return { success: false, error: "Missing required fields" }
+    if (!imageFile) {
+        return { success: false, error: "Thiếu thông tin bắt buộc" }
     }
 
     try {
-        // Get file extension from MIME type
         const fileExtension = imageFile.type.split("/")[1] || "webp"
-
-        // Convert File to buffer for Discord
         const arrayBuffer = await imageFile.arrayBuffer()
         const buffer = Buffer.from(arrayBuffer)
+        const key = `memory-${Date.now()}.${fileExtension}`
 
-        // Create form data for Discord
-        const discordFormData = new FormData()
+        const command = new PutObjectCommand({
+            Bucket: S3_BUCKET_NAME,
+            Key: key,
+            Body: buffer,
+            ContentType: imageFile.type,
+            Metadata: {
+                caption: encodeURIComponent(caption || "")
+            }
+        });
 
-        // Create the embed payload
-        const payload = {
-            embeds: [
-                {
-                    title: "New Graduation Memory Submission",
-                    color: 0x5865f2,
-                    fields: [
-                        {
-                            name: "Submitted by",
-                            value: author,
-                            inline: true,
-                        },
-                        {
-                            name: "Caption",
-                            value: caption || "No caption provided",
-                            inline: true,
-                        },
-                    ],
-                    footer: {
-                        text: "Graduation Photo Bank | Pending Approval",
-                    },
-                    timestamp: new Date().toISOString(),
-                },
-            ],
-        }
-
-        discordFormData.append("payload_json", JSON.stringify(payload))
-
-        const blob = new Blob([buffer], { type: imageFile.type })
-        discordFormData.append("files[0]", blob, `graduation-memory-${Date.now()}.${fileExtension}`)
-
-        const response = await fetch(webhookUrl, {
-            method: "POST",
-            body: discordFormData,
-        })
-
-        if (!response.ok) {
-            const errorText = await response.text()
-            console.error("Discord webhook error:", errorText)
-            return { success: false, error: "Failed to submit to Discord" }
-        }
+        await s3Client.send(command);
 
         return { success: true }
     } catch (error) {
         console.error("Upload error:", error)
-        return { success: false, error: "Failed to upload image" }
+        return { success: false, error: "Đã xảy ra lỗi khi tải ảnh lên" }
     }
 }
