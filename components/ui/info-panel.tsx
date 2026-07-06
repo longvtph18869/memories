@@ -31,13 +31,13 @@ export function InfoPanel({ open, onClose, imageCount = 0 }: InfoPanelProps) {
                 <div className="p-6 space-y-8 flex-1">
                     {/* Title */}
                     <div>
-                        <h2 className="text-[11px] uppercase tracking-[0.3em] text-foreground-muted mb-2">Kỷ Niệm Thanh Xuân</h2>
-                        <h3 className="font-serif text-3xl italic text-foreground-bright">Niên Khóa 2026</h3>
+                        <h2 className="text-[11px] uppercase tracking-[0.3em] text-foreground-muted mb-2">Anh vs Em</h2>
+                        <h3 className="font-serif text-3xl italic text-foreground-bright">Hành trình yêu thương</h3>
                     </div>
 
                     {/* Description */}
                     <p className="text-[12px] leading-relaxed text-foreground">
-                        Một kho ảnh chung lưu giữ hành trình của chúng ta. Nơi lưu lại những kỷ niệm đẹp nhất thời học sinh và cùng nhau hồi tưởng lại những khoảnh khắc đáng nhớ.
+                        Nơi lưu giữ những khoảnh khắc ngọt ngào, những chuyến đi và kỷ niệm đẹp đẽ trên hành trình yêu thương của hai chúng mình.
                     </p>
 
                     {/* Stats */}
@@ -48,7 +48,7 @@ export function InfoPanel({ open, onClose, imageCount = 0 }: InfoPanelProps) {
                         </div>
                         <div className="flex justify-between text-[11px] uppercase tracking-wider">
                             <span className="text-foreground-muted">Từ</span>
-                            <span className="text-foreground-bright">tháng 12, 2025</span>
+                            <span className="text-foreground-bright">tháng 4, 2026</span>
                         </div>
                     </div>
 
@@ -69,18 +69,6 @@ export function InfoPanel({ open, onClose, imageCount = 0 }: InfoPanelProps) {
                             </p>
                         </div>
                     </div>
-                </div>
-
-                {/* Footer with Logo */}
-                <div className="mt-auto border-t border-border p-6">
-                    <a
-                        href="https://sdcard.photos"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="block w-fit hover:opacity-70 transition-opacity cursor-pointer"
-                    >
-                        <SdcardphotosLogo className="w-32 h-12" />
-                    </a>
                 </div>
             </div>
         </div>

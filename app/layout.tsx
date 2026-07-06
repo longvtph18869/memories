@@ -16,8 +16,11 @@ const instrumentSerif = Instrument_Serif({
 })
 
 export const metadata: Metadata = {
-  title: "Graduation Memories",
-  description: "A shared photo bank for our graduating class",
+  title: "Anh vs Em",
+  description: "Kho lưu trữ những khoảnh khắc yêu thương và kỷ niệm đẹp đẽ",
+  icons: {
+    icon: "data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>❤️</text></svg>",
+  }
 }
 
 export default function RootLayout({

@@ -2,7 +2,7 @@
 
 import { UploadResult } from "@/types";
 import { cookies } from "next/headers";
-import { PutObjectCommand } from '@aws-sdk/client-s3';
+import { PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { s3Client, S3_BUCKET_NAME } from '@/lib/s3';
 
 export async function uploadImage(formData: FormData): Promise<UploadResult> {
@@ -46,5 +46,36 @@ export async function uploadImage(formData: FormData): Promise<UploadResult> {
     } catch (error) {
         console.error("Upload error:", error)
         return { success: false, error: "Đã xảy ra lỗi khi tải ảnh lên" }
+    }
+}
+
+export async function deleteImage(key: string): Promise<UploadResult> {
+    const cookieStore = await cookies()
+    const isAdmin = cookieStore.get("admin_session")?.value === "true"
+    
+    if (!isAdmin) {
+        return { success: false, error: "Unauthorized access" }
+    }
+
+    if (!S3_BUCKET_NAME) {
+        return { success: false, error: "Chưa cấu hình Storage Bucket" }
+    }
+
+    if (!key) {
+        return { success: false, error: "Thiếu thông tin file" }
+    }
+
+    try {
+        const command = new DeleteObjectCommand({
+            Bucket: S3_BUCKET_NAME,
+            Key: key,
+        });
+
+        await s3Client.send(command);
+
+        return { success: true }
+    } catch (error) {
+        console.error("Delete error:", error)
+        return { success: false, error: "Đã xảy ra lỗi khi xóa ảnh" }
     }
 }
