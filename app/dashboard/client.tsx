@@ -343,7 +343,7 @@ export default function DashboardClient({ isAuthenticated }: { isAuthenticated: 
                                         {/* Nút xóa hiện ra khi hover */}
                                         <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                                             <button
-                                                onClick={() => handleDelete(img.key)}
+                                                onClick={() => img.key && handleDelete(img.key)}
                                                 disabled={isDeleting}
                                                 className="p-2 bg-red-600/90 text-white rounded-none hover:bg-red-700 transition-colors disabled:opacity-50 cursor-pointer"
                                                 title="Xóa ảnh"
