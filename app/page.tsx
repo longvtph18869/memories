@@ -147,16 +147,6 @@ export default function Home() {
         </div>
       )}
 
-      {/* Photo count indicator */}
-      <div className="fixed top-6 right-6 text-[10px] uppercase tracking-wider text-foreground-muted bg-background/80 backdrop-blur-sm px-3 py-2 border border-border">
-        <span className="text-foreground">{images.length}</span> kỷ niệm
-      </div>
-
-      {/* Title */}
-      <div className="fixed top-6 left-6 text-[10px] uppercase tracking-wider text-foreground-muted bg-background/80 backdrop-blur-sm px-3 py-2 border border-border">
-        <span className="text-foreground">từ tháng 4, 2026</span>
-      </div>
-
       {/* Bottom navigation */}
       <BottomNav
         onInfoClick={() => setInfoOpen(true)}
