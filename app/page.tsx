@@ -2,11 +2,16 @@
 
 import { useState, useEffect } from "react"
 import Image from "next/image"
-import { X, ChevronLeft, ChevronRight } from "lucide-react"
 import InfiniteGallery from "@/components/gallery/InfiniteGallery"
 import { BottomNav } from "@/components/ui/bottom-nav"
 import { InfoPanel } from "@/components/ui/info-panel"
 import { ImageItem } from "@/types"
+
+// Import thư viện Lightbox chuyên nghiệp
+import Lightbox from "yet-another-react-lightbox"
+import "yet-another-react-lightbox/styles.css"
+import Captions from "yet-another-react-lightbox/plugins/captions"
+import "yet-another-react-lightbox/plugins/captions.css"
 
 function preloadImage(src: string): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -73,23 +78,7 @@ export default function Home() {
     }
   }, [isLoading, images.length])
 
-  // Lắng nghe phím bấm để điều hướng Lightbox bằng bàn phím
-  useEffect(() => {
-    if (selectedImageIndex === null) return;
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        setSelectedImageIndex(null);
-      } else if (e.key === "ArrowLeft") {
-        setSelectedImageIndex(prev => prev !== null ? (prev - 1 + images.length) % images.length : null);
-      } else if (e.key === "ArrowRight") {
-        setSelectedImageIndex(prev => prev !== null ? (prev + 1) % images.length : null);
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [selectedImageIndex, images.length]);
+  // Lightbox của thư viện tự động xử lý bàn phím và vuốt cảm ứng
 
   if (!showGallery) {
     return (
@@ -115,6 +104,15 @@ export default function Home() {
       </main>
     )
   }
+
+  // Định dạng lại danh sách ảnh truyền vào Lightbox
+  const slides = images.map(img => {
+    const hasRealCaption = img.alt && !img.alt.startsWith('memory-');
+    return {
+      src: img.src,
+      title: hasRealCaption ? img.alt : undefined,
+    }
+  });
 
   return (
     <main className="min-h-screen bg-background">
@@ -178,86 +176,18 @@ export default function Home() {
         isGridView={isGridView}
       />
 
-      {/* Lightbox Modal (Xem phóng to ảnh) */}
-      {selectedImageIndex !== null && (
-        <div className="fixed inset-0 z-[100] bg-black/95 flex flex-col justify-between p-4 md:p-6 backdrop-blur-sm">
-          {/* Header */}
-          <div className="flex justify-end">
-            <button 
-              onClick={() => setSelectedImageIndex(null)}
-              className="text-foreground-muted hover:text-foreground-bright p-2 transition-colors cursor-pointer"
-            >
-              <X className="w-6 h-6" />
-            </button>
-          </div>
-
-          {/* Main content (Ảnh phóng to + Điều hướng) */}
-          <div className="flex-1 flex items-center justify-between gap-4 max-w-5xl mx-auto w-full relative">
-            <button 
-              onClick={(e) => {
-                e.stopPropagation();
-                setSelectedImageIndex(prev => prev !== null ? (prev - 1 + images.length) % images.length : null);
-              }}
-              className="p-3 bg-background/20 hover:bg-background/60 border border-border text-foreground-muted hover:text-foreground-bright transition-all cursor-pointer hidden sm:block"
-            >
-              <ChevronLeft className="w-5 h-5" />
-            </button>
-
-            <div 
-              onClick={() => setSelectedImageIndex(null)}
-              className="relative flex-1 h-[70vh] w-full flex items-center justify-center cursor-zoom-out"
-            >
-              <Image
-                src={images[selectedImageIndex].src}
-                alt="Memory"
-                fill
-                className="object-contain"
-                unoptimized
-              />
-            </div>
-
-            <button 
-              onClick={(e) => {
-                e.stopPropagation();
-                setSelectedImageIndex(prev => prev !== null ? (prev + 1) % images.length : null);
-              }}
-              className="p-3 bg-background/20 hover:bg-background/60 border border-border text-foreground-muted hover:text-foreground-bright transition-all cursor-pointer hidden sm:block"
-            >
-              <ChevronRight className="w-5 h-5" />
-            </button>
-          </div>
-
-          {/* Footer (Chỉ số thứ tự) */}
-          <div className="text-center space-y-2 pb-6">
-            {/* Lọc bỏ tên file key nếu không có chú thích thật */}
-            {images[selectedImageIndex].alt && 
-             !images[selectedImageIndex].alt.startsWith('memory-') && (
-              <p className="text-[12px] text-foreground-bright max-w-md mx-auto">
-                {images[selectedImageIndex].alt}
-              </p>
-            )}
-            <p className="text-[10px] font-mono text-foreground-muted/60">
-              {selectedImageIndex + 1} / {images.length}
-            </p>
-            
-            {/* Thanh điều hướng nhanh cho Điện thoại di động (Mobile Nav) */}
-            <div className="flex justify-center gap-6 sm:hidden pt-2">
-              <button 
-                onClick={() => setSelectedImageIndex(prev => prev !== null ? (prev - 1 + images.length) % images.length : null)}
-                className="px-5 py-2 bg-background/40 border border-border text-foreground-muted hover:text-foreground-bright text-[10px] uppercase tracking-wider cursor-pointer"
-              >
-                Trước
-              </button>
-              <button 
-                onClick={() => setSelectedImageIndex(prev => prev !== null ? (prev + 1) % images.length : null)}
-                className="px-5 py-2 bg-background/40 border border-border text-foreground-muted hover:text-foreground-bright text-[10px] uppercase tracking-wider cursor-pointer"
-              >
-                Sau
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Lightbox Modal của thư viện */}
+      <Lightbox
+        open={selectedImageIndex !== null}
+        index={selectedImageIndex ?? 0}
+        close={() => setSelectedImageIndex(null)}
+        slides={slides}
+        plugins={[Captions]}
+        captions={{ descriptionTextAlign: "center" }}
+        styles={{
+          container: { backgroundColor: "rgba(0, 0, 0, 0.96)", backdropFilter: "blur(4px)" }
+        }}
+      />
 
       {/* Info panel */}
       <InfoPanel open={infoOpen} onClose={() => setInfoOpen(false)} imageCount={images.length} />
