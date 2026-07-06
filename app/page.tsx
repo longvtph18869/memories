@@ -76,11 +76,11 @@ export default function Home() {
       <main className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
           <p className="text-[11px] uppercase tracking-[0.3em] text-foreground-muted mb-2">Đang tải kỷ niệm...</p>
-          {totalCount > 0 && (
+          {/* {totalCount > 0 && (
             <p className="text-[10px] font-mono text-foreground-muted/60">
               {loadedCount} / {totalCount}
             </p>
-          )}
+          )} */}
         </div>
       </main>
     )
@@ -104,11 +104,11 @@ export default function Home() {
       >
         <div className="text-center">
           <p className="text-[11px] uppercase tracking-[0.3em] text-foreground-muted mb-2">Đang tải kỷ niệm...</p>
-          {totalCount > 0 && (
+          {/* {totalCount > 0 && (
             <p className="text-[10px] font-mono text-foreground-muted/60">
               {loadedCount} / {totalCount}
             </p>
-          )}
+          )} */}
         </div>
       </div>
 
