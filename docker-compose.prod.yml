@@ -5,8 +5,29 @@ services:
       target: runner
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "3001:3000" # Dùng cổng 3001 để tránh trùng cổng 3000 của Portfolio
     env_file:
       - .env
     environment:
       - PORT=3000
+    networks:
+      - portfolio_default_net
+
+  create-bucket:
+    image: minio/mc
+    networks:
+      - portfolio_default_net
+    env_file:
+      - .env
+    entrypoint: >
+      /bin/sh -c "
+      until /usr/bin/mc alias set myminio http://rustfs:9000 $${S3_ACCESS_KEY_ID} $${S3_SECRET_ACCESS_KEY}; do echo '...waiting...' && sleep 1; done;
+      /usr/bin/mc mb myminio/memories --ignore-existing;
+      /usr/bin/mc anonymous set public myminio/memories;
+      exit 0;
+      "
+
+networks:
+  portfolio_default_net:
+    external: true
+    name: portfolio_default # Kết nối vào mạng của Portfolio để gọi được http://rustfs:9000
