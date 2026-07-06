@@ -95,56 +95,65 @@ const createClothMaterial = () => {
       void main() {
         vec2 uv = vUv;
         
-        // Cấu hình viền khung Polaroid
+        // Khai báo kích thước viền và độ mượt khi chuyển cạnh (Antialiasing)
         float borderSize = 0.025;
-        bool isBorder = (uv.x < borderSize || uv.x > (1.0 - borderSize) || 
-                         uv.y < borderSize || uv.y > (1.0 - borderSize));
-        bool isOutline = (uv.x < 0.003 || uv.x > 0.997 || uv.y < 0.003 || uv.y > 0.997);
+        float transition = 0.003; // Bán kính làm mịn viền (tránh răng cưa/rung viền)
         
-        vec4 color;
+        // Thuật toán làm mịn viền trong (giữa ảnh và khung trắng)
+        float borderX = smoothstep(borderSize - transition, borderSize + transition, uv.x) * 
+                        (1.0 - smoothstep(1.0 - borderSize - transition, 1.0 - borderSize + transition, uv.x));
+        float borderY = smoothstep(borderSize - transition, borderSize + transition, uv.y) * 
+                        (1.0 - smoothstep(1.0 - borderSize - transition, 1.0 - borderSize + transition, uv.y));
+        float inImage = borderX * borderY; // = 1.0 khi ở trong ảnh, = 0.0 khi ở trên viền, có chuyển tiếp mượt ở biên
         
-        if (isOutline) {
-          // Đường chỉ đen mỏng ở rìa ngoài cùng tạo độ nổi
-          color = vec4(0.12, 0.12, 0.12, 0.5);
-        } else if (isBorder) {
-          // Viền giấy trắng ấm phong cách Polaroid
-          color = vec4(0.97, 0.96, 0.94, 1.0);
-        } else {
-          // Thu nhỏ UV để hiển thị trọn vẹn bức ảnh bên trong viền
-          vec2 innerUv = (uv - vec2(borderSize)) / (1.0 - 2.0 * borderSize);
-          color = texture2D(map, innerUv);
+        // Thuật toán làm mịn viền ngoài (đường chỉ đen ngoài cùng)
+        float outlineSize = 0.004;
+        float outlineX = smoothstep(outlineSize - 0.001, outlineSize + 0.001, uv.x) * 
+                          (1.0 - smoothstep(1.0 - outlineSize - 0.001, 1.0 - outlineSize + 0.001, uv.x));
+        float outlineY = smoothstep(outlineSize - 0.001, outlineSize + 0.001, uv.y) * 
+                          (1.0 - smoothstep(1.0 - outlineSize - 0.001, 1.0 - outlineSize + 0.001, uv.y));
+        float inBorder = outlineX * outlineY; // = 1.0 khi ở trong khung viền trắng, = 0.0 khi ở ngoài rìa đen
+
+        // Giới hạn UV ảnh trong khoảng [0, 1] để tránh lỗi lấy mẫu ngoài biên của GPU
+        vec2 innerUv = clamp((uv - vec2(borderSize)) / (1.0 - 2.0 * borderSize), 0.0, 1.0);
+        vec4 imgColor = texture2D(map, innerUv);
+        
+        // Xử lý làm mờ nếu có
+        if (blurAmount > 0.0) {
+          vec2 texelSize = 1.0 / vec2(textureSize(map, 0));
+          vec4 blurred = vec4(0.0);
+          float total = 0.0;
           
-          // Xử lý làm mờ nếu ở xa tiêu cự
-          if (blurAmount > 0.0) {
-            vec2 texelSize = 1.0 / vec2(textureSize(map, 0));
-            vec4 blurred = vec4(0.0);
-            float total = 0.0;
-            
-            for (float x = -2.0; x <= 2.0; x += 1.0) {
-              for (float y = -2.0; y <= 2.0; y += 1.0) {
-                vec2 offset = vec2(x, y) * texelSize * blurAmount;
-                float weight = 1.0 / (1.0 + length(vec2(x, y)));
-                blurred += texture2D(map, innerUv + offset) * weight;
-                total += weight;
-              }
+          for (float x = -2.0; x <= 2.0; x += 1.0) {
+            for (float y = -2.0; y <= 2.0; y += 1.0) {
+              vec2 offset = vec2(x, y) * texelSize * blurAmount;
+              float weight = 1.0 / (1.0 + length(vec2(x, y)));
+              blurred += texture2D(map, clamp(innerUv + offset, 0.0, 1.0)) * weight;
+              total += weight;
             }
-            color = blurred / total;
           }
-          
-          // Hậu kỳ màu sắc điện ảnh (Cinematic Color Grading)
-          // Tăng nhẹ độ tương phản (Contrast)
-          color.rgb = (color.rgb - 0.5) * 1.06 + 0.5;
-          // Ngả tone màu ấm áp lãng mạn (Warm Tones)
-          color.r *= 1.04;
-          color.g *= 1.01;
-          color.b *= 0.95;
+          imgColor = blurred / total;
         }
         
-        // Thêm bóng sáng phản chiếu khi ảnh uốn cong
-        float curveHighlight = abs(scrollForce) * 0.05;
-        color.rgb += vec3(curveHighlight * 0.12);
+        // Hậu kỳ màu sắc điện ảnh cho ảnh
+        imgColor.rgb = (imgColor.rgb - 0.5) * 1.06 + 0.5;
+        imgColor.r *= 1.04;
+        imgColor.g *= 1.01;
+        imgColor.b *= 0.95;
         
-        gl_FragColor = vec4(color.rgb, color.a * opacity);
+        // Thiết lập các màu sắc thành phần
+        vec4 borderColor = vec4(0.97, 0.96, 0.94, 1.0); // Màu viền trắng ấm
+        vec4 outlineColor = vec4(0.12, 0.12, 0.12, 0.5); // Đường chỉ đen mỏng rìa ngoài
+        
+        // Trộn (blend) mượt mà các thành phần màu dựa trên mặt nạ smoothstep
+        vec4 finalColor = mix(borderColor, imgColor, inImage);
+        finalColor = mix(outlineColor, finalColor, inBorder);
+        
+        // Hiệu ứng ánh sáng phản chiếu khi uốn cong
+        float curveHighlight = abs(scrollForce) * 0.05;
+        finalColor.rgb += vec3(curveHighlight * 0.12);
+        
+        gl_FragColor = vec4(finalColor.rgb, finalColor.a * opacity);
       }
     `,
     });
