@@ -2,7 +2,7 @@
 
 import type React from 'react';
 import { useRef, useMemo, useCallback, useState, useEffect } from 'react';
-import { Canvas, useFrame } from '@react-three/fiber';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { useTexture } from '@react-three/drei';
 import * as THREE from 'three';
 import Image from 'next/image';
@@ -41,8 +41,26 @@ interface PlaneData {
 }
 
 const DEFAULT_DEPTH_RANGE = 50;
-const MAX_HORIZONTAL_OFFSET = 8;
-const MAX_VERTICAL_OFFSET = 8;
+const GOLDEN_ANGLE = 2.399963229728653;
+// Tỉ lệ vùng màn hình được phủ ảnh (chừa lề để ảnh không bị cắt sát mép)
+const SPREAD = 0.75;
+
+// Chiếu offset chuẩn hóa (-1..1) ra tọa độ thế giới, theo kích thước
+// khung nhìn (frustum) tại độ sâu của plane — tự khớp mọi tỉ lệ màn hình
+const projectOffset = (
+    nx: number,
+    ny: number,
+    z: number,
+    fovDeg: number,
+    aspect: number
+) => {
+    const dist = Math.max(DEFAULT_DEPTH_RANGE / 2 - z, 1);
+    const halfH = Math.tan(THREE.MathUtils.degToRad(fovDeg / 2)) * dist;
+    return {
+        x: nx * halfH * aspect * SPREAD,
+        y: ny * halfH * SPREAD,
+    };
+};
 
 const createClothMaterial = () => {
     return new THREE.ShaderMaterial({
@@ -244,24 +262,21 @@ function GalleryScene({
         [visibleCount]
     );
 
+    const { camera, size } = useThree();
+
+    // Rải đều trên đĩa đơn vị bằng xoắn ốc góc vàng (Vogel spiral):
+    // tọa độ chuẩn hóa -1..1, lúc render mới nhân với kích thước khung nhìn
     const spatialPositions = useMemo(() => {
-        const positions: { x: number; y: number }[] = [];
+        const positions: { nx: number; ny: number }[] = [];
 
         for (let i = 0; i < visibleCount; i++) {
-            // Create varied distribution patterns for both axes
-            const horizontalAngle = (i * 2.618) % (Math.PI * 2); // Golden angle for natural distribution
-            const verticalAngle = (i * 1.618 + Math.PI / 3) % (Math.PI * 2); // Offset angle for vertical
+            const angle = i * GOLDEN_ANGLE;
+            const radius = Math.sqrt((i + 0.5) / visibleCount);
 
-            const horizontalRadius = (i % 3) * 1.2; // Vary the distance from center
-            const verticalRadius = ((i + 1) % 4) * 0.8; // Different pattern for vertical
-
-            const x =
-                (Math.sin(horizontalAngle) * horizontalRadius * MAX_HORIZONTAL_OFFSET) /
-                3;
-            const y =
-                (Math.cos(verticalAngle) * verticalRadius * MAX_VERTICAL_OFFSET) / 4;
-
-            positions.push({ x, y });
+            positions.push({
+                nx: Math.cos(angle) * radius,
+                ny: Math.sin(angle) * radius,
+            });
         }
 
         return positions;
@@ -270,30 +285,49 @@ function GalleryScene({
     const totalImages = normalizedImages.length;
     const depthRange = DEFAULT_DEPTH_RANGE;
 
+    const cameraFov =
+        (camera as THREE.PerspectiveCamera).fov ?? 55;
+    const cameraAspect = size.height > 0 ? size.width / size.height : 1;
+
     // Initialize plane data - use state for rendering, ref for fast mutations
     const [initialPlanes] = useState<PlaneData[]>(() =>
-        Array.from({ length: visibleCount }, (_, i) => ({
-            index: i,
-            z: visibleCount > 0 ? ((depthRange / visibleCount) * i) % depthRange : 0,
-            imageIndex: totalImages > 0 ? i % totalImages : 0,
-            x: spatialPositions[i]?.x ?? 0,
-            y: spatialPositions[i]?.y ?? 0,
-        }))
+        Array.from({ length: visibleCount }, (_, i) => {
+            const z =
+                visibleCount > 0 ? ((depthRange / visibleCount) * i) % depthRange : 0;
+            const offset = projectOffset(
+                spatialPositions[i]?.nx ?? 0,
+                spatialPositions[i]?.ny ?? 0,
+                z,
+                cameraFov,
+                cameraAspect
+            );
+            return {
+                index: i,
+                z,
+                imageIndex: totalImages > 0 ? i % totalImages : 0,
+                x: offset.x,
+                y: offset.y,
+            };
+        })
     );
 
     const planesData = useRef<PlaneData[]>(initialPlanes);
 
     useEffect(() => {
-        planesData.current = Array.from({ length: visibleCount }, (_, i) => ({
-            index: i,
-            z:
+        planesData.current = Array.from({ length: visibleCount }, (_, i) => {
+            const z =
                 visibleCount > 0
                     ? ((depthRange / Math.max(visibleCount, 1)) * i) % depthRange
-                    : 0,
-            imageIndex: totalImages > 0 ? i % totalImages : 0,
-            x: spatialPositions[i]?.x ?? 0,
-            y: spatialPositions[i]?.y ?? 0,
-        }));
+                    : 0;
+            // x/y được useFrame tính lại ngay frame kế tiếp theo khung nhìn
+            return {
+                index: i,
+                z,
+                imageIndex: totalImages > 0 ? i % totalImages : 0,
+                x: 0,
+                y: 0,
+            };
+        });
     }, [depthRange, spatialPositions, totalImages, visibleCount]);
 
     // Handle scroll input
@@ -393,8 +427,20 @@ function GalleryScene({
             }
 
             plane.z = ((newZ % totalRange) + totalRange) % totalRange;
-            plane.x = spatialPositions[i]?.x ?? 0;
-            plane.y = spatialPositions[i]?.y ?? 0;
+
+            // Chiếu offset chuẩn hóa ra tọa độ thế giới theo khung nhìn hiện tại:
+            // offset tỉ lệ với khoảng cách nên vị trí trên màn hình ổn định
+            // và phủ đều toàn màn hình ở mọi tỉ lệ (mobile lẫn desktop)
+            const cam = state.camera as THREE.PerspectiveCamera;
+            const offset = projectOffset(
+                spatialPositions[i]?.nx ?? 0,
+                spatialPositions[i]?.ny ?? 0,
+                plane.z,
+                cam.fov ?? 55,
+                cam.aspect ?? 1
+            );
+            plane.x = offset.x;
+            plane.y = offset.y;
 
             // Calculate opacity based on fade settings
             const normalizedPosition = plane.z / totalRange; // 0 to 1
