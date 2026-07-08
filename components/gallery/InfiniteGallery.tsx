@@ -288,7 +288,9 @@ function FloatingParticles({
         material.uniforms.globalOpacity.value = globalOpacity;
     });
 
-    return <points geometry={geometry} material={material} />;
+    // frustumCulled=false: vị trí thật của hạt do shader tính (wrap theo scroll),
+    // nếu để Three.js tự cắt theo khối bao gốc thì toàn bộ hạt bị loại không vẽ
+    return <points geometry={geometry} material={material} frustumCulled={false} />;
 }
 
 const HEART_COUNT = 18;
@@ -312,6 +314,7 @@ function HeartStarParticles({
         const phases = new Float32Array(total);
         const tints = new Float32Array(total);
         const kinds = new Float32Array(total); // 0 = tim, 1 = sao
+        const speeds = new Float32Array(total); // tốc độ rơi ngẫu nhiên của tim
 
         for (let i = 0; i < total; i++) {
             const isStar = i >= HEART_COUNT;
@@ -322,6 +325,7 @@ function HeartStarParticles({
             phases[i] = Math.random() * Math.PI * 2;
             tints[i] = Math.random();
             kinds[i] = isStar ? 1 : 0;
+            speeds[i] = Math.random();
         }
 
         const g = new THREE.BufferGeometry();
@@ -330,6 +334,7 @@ function HeartStarParticles({
         g.setAttribute('aPhase', new THREE.BufferAttribute(phases, 1));
         g.setAttribute('aTint', new THREE.BufferAttribute(tints, 1));
         g.setAttribute('aKind', new THREE.BufferAttribute(kinds, 1));
+        g.setAttribute('aSpeed', new THREE.BufferAttribute(speeds, 1));
         return g;
     }, []);
 
@@ -350,6 +355,7 @@ function HeartStarParticles({
                     attribute float aPhase;
                     attribute float aTint;
                     attribute float aKind;
+                    attribute float aSpeed;
                     varying float vAlpha;
                     varying float vTint;
                     varying float vKind;
@@ -360,10 +366,11 @@ function HeartStarParticles({
                         float isStar = step(0.5, aKind);
                         vec3 pos = position;
 
-                        // Tim: bay lên + lắc lư như trôi trong gió; sao: gần như đứng yên
-                        pos.x += sin(time * mix(0.25, 0.5, isStar) + aPhase) * mix(0.9, 0.15, isStar);
-                        float rise = mix(0.45, 0.03, isStar);
-                        pos.y = mod(pos.y + time * rise + 10.0, 20.0) - 10.0;
+                        // Tim: rơi tự do, mỗi chiếc một tốc độ ngẫu nhiên, vừa rơi vừa
+                        // chao đảo như lá; sao: gần như đứng yên trên nền trời
+                        pos.x += sin(time * mix(0.35, 0.5, isStar) + aPhase) * mix(1.1, 0.15, isStar);
+                        float fall = mix(0.5 + aSpeed * 1.3, -0.03, isStar);
+                        pos.y = mod(pos.y - time * fall + 10.0, 20.0) - 10.0;
 
                         float z = mod(pos.z + scrollOffset, ${DEFAULT_DEPTH_RANGE.toFixed(1)});
                         pos.z = z - ${(DEFAULT_DEPTH_RANGE / 2).toFixed(1)};
@@ -373,14 +380,16 @@ function HeartStarParticles({
 
                         float fade = smoothstep(1.5, 6.0, dist) * (1.0 - smoothstep(30.0, 48.0, dist));
 
-                        // Sao nhấp nháy nhanh và sâu hơn tim
-                        float heartPulse = 0.55 + 0.45 * (0.5 + 0.5 * sin(time * 0.7 + aPhase * 2.0));
+                        // Tim luôn hiện rõ (chỉ mờ theo khoảng cách); sao nhấp nháy nhanh và sâu
                         float starTwinkle = pow(0.5 + 0.5 * sin(time * 2.2 + aPhase * 5.0), 2.0);
-                        float twinkle = mix(heartPulse, 0.25 + 0.75 * starTwinkle, isStar);
+                        float twinkle = mix(1.0, 0.25 + 0.75 * starTwinkle, isStar);
                         vAlpha = fade * twinkle;
 
-                        // Sao phồng/xẹp theo nhịp lấp lánh
-                        float sizePulse = mix(1.0, 0.6 + 0.8 * starTwinkle, isStar);
+                        // Tim đập thình thịch: phần lớn thời gian giữ nguyên, thi thoảng
+                        // phồng vọt lên rồi xẹp (mỗi tim một nhịp riêng);
+                        // sao phồng/xẹp theo nhịp lấp lánh
+                        float heartBeat = 0.75 + 0.5 * pow(abs(sin(time * (1.8 + aSpeed) + aPhase)), 6.0);
+                        float sizePulse = mix(heartBeat, 0.6 + 0.8 * starTwinkle, isStar);
                         gl_PointSize = min(aSize * (10.0 / dist) * sizePulse, 48.0);
                         gl_Position = projectionMatrix * mvPosition;
                     }
@@ -405,7 +414,7 @@ function HeartStarParticles({
                             float heart = 1.0 - smoothstep(-0.03, 0.12, h);
 
                             color = mix(vec3(0.85, 0.35, 0.45), vec3(0.98, 0.68, 0.74), vTint);
-                            alpha = heart * 0.55;
+                            alpha = heart * 0.75;
                         } else {
                             // Sao: lõi sáng + tia chữ thập
                             float d = length(q);
@@ -433,7 +442,9 @@ function HeartStarParticles({
         material.uniforms.globalOpacity.value = globalOpacity;
     });
 
-    return <points geometry={geometry} material={material} />;
+    // frustumCulled=false: vị trí thật của hạt do shader tính (wrap theo scroll),
+    // nếu để Three.js tự cắt theo khối bao gốc thì toàn bộ hạt bị loại không vẽ
+    return <points geometry={geometry} material={material} frustumCulled={false} />;
 }
 
 function ImagePlane({
