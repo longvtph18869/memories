@@ -178,7 +178,7 @@ const createClothMaterial = () => {
     });
 };
 
-const PARTICLE_COUNT = 140;
+const PARTICLE_COUNT = 320;
 
 // Lớp bụi sáng/đom đóm lơ lửng giữa các tấm ảnh trong đường hầm 3D.
 // Trôi chậm theo scroll (parallax) + bập bềnh và nhấp nháy nhẹ theo thời gian.
@@ -201,7 +201,7 @@ function FloatingParticles({
             positions[i * 3] = (Math.random() * 2 - 1) * 14;
             positions[i * 3 + 1] = (Math.random() * 2 - 1) * 10;
             positions[i * 3 + 2] = Math.random() * DEFAULT_DEPTH_RANGE;
-            sizes[i] = 6 + Math.random() * 18;
+            sizes[i] = 8 + Math.random() * 22;
             phases[i] = Math.random() * Math.PI * 2;
             tints[i] = Math.random();
         }
@@ -250,7 +250,7 @@ function FloatingParticles({
                         float dist = max(-mvPosition.z, 0.001);
 
                         // Mờ dần khi quá gần camera hoặc quá xa
-                        float fade = smoothstep(1.5, 6.0, dist) * (1.0 - smoothstep(30.0, 48.0, dist));
+                        float fade = smoothstep(1.5, 5.0, dist) * (1.0 - smoothstep(36.0, 50.0, dist));
                         // Nhấp nháy nhẹ như đom đóm
                         float twinkle = 0.4 + 0.6 * (0.5 + 0.5 * sin(time * 0.8 + aPhase * 3.0));
                         vAlpha = fade * twinkle;
@@ -273,7 +273,7 @@ function FloatingParticles({
                         vec3 warmLight = vec3(1.0, 0.92, 0.75);
                         vec3 color = mix(warmDark, warmLight, vTint);
 
-                        gl_FragColor = vec4(color, disc * vAlpha * 0.45 * globalOpacity);
+                        gl_FragColor = vec4(color, disc * vAlpha * 0.6 * globalOpacity);
                     }
                 `,
             }),
@@ -293,8 +293,8 @@ function FloatingParticles({
     return <points geometry={geometry} material={material} frustumCulled={false} />;
 }
 
-const HEART_COUNT = 18;
-const STAR_COUNT = 45;
+const HEART_COUNT = 50;
+const STAR_COUNT = 120;
 
 // Trái tim hồng bay lên chầm chậm + ánh sao vàng lấp lánh (tia chữ thập).
 // Cả hai vẽ bằng shader trong cùng một lớp points -> chỉ 1 draw call.
@@ -366,11 +366,11 @@ function HeartStarParticles({
                         float isStar = step(0.5, aKind);
                         vec3 pos = position;
 
-                        // Tim: rơi tự do, mỗi chiếc một tốc độ ngẫu nhiên, vừa rơi vừa
-                        // chao đảo như lá; sao: gần như đứng yên trên nền trời
-                        pos.x += sin(time * mix(0.35, 0.5, isStar) + aPhase) * mix(1.1, 0.15, isStar);
-                        float fall = mix(0.5 + aSpeed * 1.3, -0.03, isStar);
-                        pos.y = mod(pos.y - time * fall + 10.0, 20.0) - 10.0;
+                        // Tim: bay lên nhẹ nhàng, mỗi chiếc một tốc độ, lắc lư như trôi
+                        // trong gió; sao: gần như đứng yên trên nền trời
+                        pos.x += sin(time * mix(0.25, 0.5, isStar) + aPhase) * mix(0.9, 0.15, isStar);
+                        float rise = mix(0.3 + aSpeed * 0.4, 0.03, isStar);
+                        pos.y = mod(pos.y + time * rise + 10.0, 20.0) - 10.0;
 
                         float z = mod(pos.z + scrollOffset, ${DEFAULT_DEPTH_RANGE.toFixed(1)});
                         pos.z = z - ${(DEFAULT_DEPTH_RANGE / 2).toFixed(1)};
@@ -378,18 +378,16 @@ function HeartStarParticles({
                         vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
                         float dist = max(-mvPosition.z, 0.001);
 
-                        float fade = smoothstep(1.5, 6.0, dist) * (1.0 - smoothstep(30.0, 48.0, dist));
+                        float fade = smoothstep(1.5, 5.0, dist) * (1.0 - smoothstep(36.0, 50.0, dist));
 
-                        // Tim luôn hiện rõ (chỉ mờ theo khoảng cách); sao nhấp nháy nhanh và sâu
+                        // Tim mờ/tỏ dịu dàng; sao nhấp nháy nhanh và sâu hơn
+                        float heartPulse = 0.7 + 0.3 * (0.5 + 0.5 * sin(time * 0.7 + aPhase * 2.0));
                         float starTwinkle = pow(0.5 + 0.5 * sin(time * 2.2 + aPhase * 5.0), 2.0);
-                        float twinkle = mix(1.0, 0.25 + 0.75 * starTwinkle, isStar);
+                        float twinkle = mix(heartPulse, 0.35 + 0.65 * starTwinkle, isStar);
                         vAlpha = fade * twinkle;
 
-                        // Tim đập thình thịch: phần lớn thời gian giữ nguyên, thi thoảng
-                        // phồng vọt lên rồi xẹp (mỗi tim một nhịp riêng);
-                        // sao phồng/xẹp theo nhịp lấp lánh
-                        float heartBeat = 0.75 + 0.5 * pow(abs(sin(time * (1.8 + aSpeed) + aPhase)), 6.0);
-                        float sizePulse = mix(heartBeat, 0.6 + 0.8 * starTwinkle, isStar);
+                        // Sao phồng/xẹp theo nhịp lấp lánh
+                        float sizePulse = mix(1.0, 0.6 + 0.8 * starTwinkle, isStar);
                         gl_PointSize = min(aSize * (10.0 / dist) * sizePulse, 48.0);
                         gl_Position = projectionMatrix * mvPosition;
                     }
@@ -424,7 +422,7 @@ function HeartStarParticles({
                             rays *= smoothstep(0.5, 0.05, d);
 
                             color = mix(vec3(0.93, 0.72, 0.32), vec3(1.0, 0.95, 0.8), vTint);
-                            alpha = glow * glow * 0.75 + rays * 0.65;
+                            alpha = glow * glow * 0.9 + rays * 0.8;
                         }
 
                         gl_FragColor = vec4(color, alpha * vAlpha * globalOpacity);
