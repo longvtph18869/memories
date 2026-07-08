@@ -213,6 +213,9 @@ function FloatingParticles({ globalOpacity }: { globalOpacity: number }) {
             new THREE.ShaderMaterial({
                 transparent: true,
                 depthWrite: false,
+                // Bỏ qua che khuất: ảnh (kể cả tấm đã mờ thành vô hình vẫn ghi depth)
+                // sẽ không bao giờ "gạt mất" lớp hiệu ứng nữa
+                depthTest: false,
                 uniforms: {
                     time: { value: 0 },
                     globalOpacity: { value: 1 },
@@ -292,7 +295,15 @@ function FloatingParticles({ globalOpacity }: { globalOpacity: number }) {
 
     // frustumCulled=false: vị trí thật của hạt do shader tính,
     // nếu để Three.js tự cắt theo khối bao gốc thì toàn bộ hạt bị loại không vẽ
-    return <points geometry={geometry} material={material} frustumCulled={false} />;
+    // renderOrder cao: luôn vẽ SAU các tấm ảnh -> hiệu ứng nằm trên cùng
+    return (
+        <points
+            geometry={geometry}
+            material={material}
+            frustumCulled={false}
+            renderOrder={10}
+        />
+    );
 }
 
 const HEART_COUNT = 12;
@@ -338,6 +349,8 @@ function HeartStarParticles({ globalOpacity }: { globalOpacity: number }) {
             new THREE.ShaderMaterial({
                 transparent: true,
                 depthWrite: false,
+                // Bỏ qua che khuất để ảnh không "gạt mất" tim/sao
+                depthTest: false,
                 uniforms: {
                     time: { value: 0 },
                     globalOpacity: { value: 1 },
@@ -401,18 +414,30 @@ function HeartStarParticles({ globalOpacity }: { globalOpacity: number }) {
                     varying float vTint;
                     varying float vKind;
 
+                    float dot2(vec2 v) { return dot(v, v); }
+
+                    // SDF trái tim chuẩn (Inigo Quilez): nhọn ở gốc (0,0),
+                    // hai thùy tròn phía trên quanh y = 1
+                    float sdHeart(vec2 p) {
+                        p.x = abs(p.x);
+                        if (p.y + p.x > 1.0)
+                            return sqrt(dot2(p - vec2(0.25, 0.75))) - sqrt(2.0) / 4.0;
+                        return sqrt(min(dot2(p - vec2(0.0, 1.0)),
+                                        dot2(p - 0.5 * max(p.x + p.y, 0.0))))
+                               * sign(p.x - p.y);
+                    }
+
                     void main() {
                         vec2 q = gl_PointCoord - 0.5;
                         float alpha;
                         vec3 color;
 
                         if (vKind < 0.5) {
-                            // Hình tim từ phương trình (x²+y²-1)³ - x²y³ < 0
-                            vec2 p = q * vec2(2.7, -2.7);
-                            p.y += 0.25;
-                            float a = p.x * p.x + p.y * p.y - 1.0;
-                            float h = a * a * a - p.x * p.x * p.y * p.y * p.y;
-                            float heart = 1.0 - smoothstep(-0.03, 0.12, h);
+                            // Đưa sprite về hệ tọa độ của SDF: y hướng lên,
+                            // đỉnh nhọn nằm gần mép dưới sprite
+                            vec2 p = vec2(q.x, -q.y + 0.38) * 1.55;
+                            float sd = sdHeart(p);
+                            float heart = 1.0 - smoothstep(-0.04, 0.05, sd);
 
                             color = mix(vec3(0.85, 0.35, 0.45), vec3(0.98, 0.68, 0.74), vTint);
                             alpha = heart * 0.75;
@@ -448,7 +473,15 @@ function HeartStarParticles({ globalOpacity }: { globalOpacity: number }) {
 
     // frustumCulled=false: vị trí thật của hạt do shader tính (wrap theo scroll),
     // nếu để Three.js tự cắt theo khối bao gốc thì toàn bộ hạt bị loại không vẽ
-    return <points geometry={geometry} material={material} frustumCulled={false} />;
+    // renderOrder cao: luôn vẽ SAU các tấm ảnh -> hiệu ứng nằm trên cùng
+    return (
+        <points
+            geometry={geometry}
+            material={material}
+            frustumCulled={false}
+            renderOrder={10}
+        />
+    );
 }
 
 function ImagePlane({
