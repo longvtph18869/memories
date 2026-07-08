@@ -291,6 +291,151 @@ function FloatingParticles({
     return <points geometry={geometry} material={material} />;
 }
 
+const HEART_COUNT = 18;
+const STAR_COUNT = 45;
+
+// Trái tim hồng bay lên chầm chậm + ánh sao vàng lấp lánh (tia chữ thập).
+// Cả hai vẽ bằng shader trong cùng một lớp points -> chỉ 1 draw call.
+function HeartStarParticles({
+    scrollVelocity,
+    globalOpacity,
+}: {
+    scrollVelocity: number;
+    globalOpacity: number;
+}) {
+    const scrollOffset = useRef(0);
+
+    const geometry = useMemo(() => {
+        const total = HEART_COUNT + STAR_COUNT;
+        const positions = new Float32Array(total * 3);
+        const sizes = new Float32Array(total);
+        const phases = new Float32Array(total);
+        const tints = new Float32Array(total);
+        const kinds = new Float32Array(total); // 0 = tim, 1 = sao
+
+        for (let i = 0; i < total; i++) {
+            const isStar = i >= HEART_COUNT;
+            positions[i * 3] = (Math.random() * 2 - 1) * 14;
+            positions[i * 3 + 1] = (Math.random() * 2 - 1) * 10;
+            positions[i * 3 + 2] = Math.random() * DEFAULT_DEPTH_RANGE;
+            sizes[i] = isStar ? 10 + Math.random() * 16 : 14 + Math.random() * 14;
+            phases[i] = Math.random() * Math.PI * 2;
+            tints[i] = Math.random();
+            kinds[i] = isStar ? 1 : 0;
+        }
+
+        const g = new THREE.BufferGeometry();
+        g.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        g.setAttribute('aSize', new THREE.BufferAttribute(sizes, 1));
+        g.setAttribute('aPhase', new THREE.BufferAttribute(phases, 1));
+        g.setAttribute('aTint', new THREE.BufferAttribute(tints, 1));
+        g.setAttribute('aKind', new THREE.BufferAttribute(kinds, 1));
+        return g;
+    }, []);
+
+    const material = useMemo(
+        () =>
+            new THREE.ShaderMaterial({
+                transparent: true,
+                depthWrite: false,
+                uniforms: {
+                    time: { value: 0 },
+                    scrollOffset: { value: 0 },
+                    globalOpacity: { value: 1 },
+                },
+                vertexShader: `
+                    uniform float time;
+                    uniform float scrollOffset;
+                    attribute float aSize;
+                    attribute float aPhase;
+                    attribute float aTint;
+                    attribute float aKind;
+                    varying float vAlpha;
+                    varying float vTint;
+                    varying float vKind;
+
+                    void main() {
+                        vTint = aTint;
+                        vKind = aKind;
+                        float isStar = step(0.5, aKind);
+                        vec3 pos = position;
+
+                        // Tim: bay lên + lắc lư như trôi trong gió; sao: gần như đứng yên
+                        pos.x += sin(time * mix(0.25, 0.5, isStar) + aPhase) * mix(0.9, 0.15, isStar);
+                        float rise = mix(0.45, 0.03, isStar);
+                        pos.y = mod(pos.y + time * rise + 10.0, 20.0) - 10.0;
+
+                        float z = mod(pos.z + scrollOffset, ${DEFAULT_DEPTH_RANGE.toFixed(1)});
+                        pos.z = z - ${(DEFAULT_DEPTH_RANGE / 2).toFixed(1)};
+
+                        vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
+                        float dist = max(-mvPosition.z, 0.001);
+
+                        float fade = smoothstep(1.5, 6.0, dist) * (1.0 - smoothstep(30.0, 48.0, dist));
+
+                        // Sao nhấp nháy nhanh và sâu hơn tim
+                        float heartPulse = 0.55 + 0.45 * (0.5 + 0.5 * sin(time * 0.7 + aPhase * 2.0));
+                        float starTwinkle = pow(0.5 + 0.5 * sin(time * 2.2 + aPhase * 5.0), 2.0);
+                        float twinkle = mix(heartPulse, 0.25 + 0.75 * starTwinkle, isStar);
+                        vAlpha = fade * twinkle;
+
+                        // Sao phồng/xẹp theo nhịp lấp lánh
+                        float sizePulse = mix(1.0, 0.6 + 0.8 * starTwinkle, isStar);
+                        gl_PointSize = min(aSize * (10.0 / dist) * sizePulse, 48.0);
+                        gl_Position = projectionMatrix * mvPosition;
+                    }
+                `,
+                fragmentShader: `
+                    uniform float globalOpacity;
+                    varying float vAlpha;
+                    varying float vTint;
+                    varying float vKind;
+
+                    void main() {
+                        vec2 q = gl_PointCoord - 0.5;
+                        float alpha;
+                        vec3 color;
+
+                        if (vKind < 0.5) {
+                            // Hình tim từ phương trình (x²+y²-1)³ - x²y³ < 0
+                            vec2 p = q * vec2(2.7, -2.7);
+                            p.y += 0.25;
+                            float a = p.x * p.x + p.y * p.y - 1.0;
+                            float h = a * a * a - p.x * p.x * p.y * p.y * p.y;
+                            float heart = 1.0 - smoothstep(-0.03, 0.12, h);
+
+                            color = mix(vec3(0.85, 0.35, 0.45), vec3(0.98, 0.68, 0.74), vTint);
+                            alpha = heart * 0.55;
+                        } else {
+                            // Sao: lõi sáng + tia chữ thập
+                            float d = length(q);
+                            float glow = smoothstep(0.5, 0.0, d);
+                            float rays = (1.0 - smoothstep(0.0, 0.04, abs(q.x)))
+                                       + (1.0 - smoothstep(0.0, 0.04, abs(q.y)));
+                            rays *= smoothstep(0.5, 0.05, d);
+
+                            color = mix(vec3(0.93, 0.72, 0.32), vec3(1.0, 0.95, 0.8), vTint);
+                            alpha = glow * glow * 0.75 + rays * 0.65;
+                        }
+
+                        gl_FragColor = vec4(color, alpha * vAlpha * globalOpacity);
+                    }
+                `,
+            }),
+        []
+    );
+
+    useFrame((state, delta) => {
+        // Trôi theo scroll chậm hơn ảnh (parallax), cùng nhịp với lớp bụi
+        scrollOffset.current += scrollVelocity * delta * 4;
+        material.uniforms.time.value = state.clock.getElapsedTime();
+        material.uniforms.scrollOffset.value = scrollOffset.current;
+        material.uniforms.globalOpacity.value = globalOpacity;
+    });
+
+    return <points geometry={geometry} material={material} />;
+}
+
 function ImagePlane({
     texture,
     position,
@@ -659,6 +804,10 @@ function GalleryScene({
     return (
         <>
             <FloatingParticles
+                scrollVelocity={scrollVelocity}
+                globalOpacity={globalOpacity}
+            />
+            <HeartStarParticles
                 scrollVelocity={scrollVelocity}
                 globalOpacity={globalOpacity}
             />
