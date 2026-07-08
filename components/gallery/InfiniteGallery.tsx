@@ -42,8 +42,9 @@ interface PlaneData {
 
 const DEFAULT_DEPTH_RANGE = 50;
 const GOLDEN_ANGLE = 2.399963229728653;
-// Tỉ lệ vùng màn hình được phủ ảnh (chừa lề để ảnh không bị cắt sát mép)
-const SPREAD = 0.75;
+// Tỉ lệ vùng màn hình được phủ ảnh (0.9 = tâm ảnh lên được tới 90% nửa màn hình,
+// nên mép ảnh chạm sát cạnh trên/dưới — tăng lên 1.0 nếu muốn tràn hẳn ra ngoài)
+const SPREAD = 0.9;
 
 // Chiếu offset chuẩn hóa (-1..1) ra tọa độ thế giới, theo kích thước
 // khung nhìn (frustum) tại độ sâu của plane — tự khớp mọi tỉ lệ màn hình
@@ -272,10 +273,17 @@ function GalleryScene({
         for (let i = 0; i < visibleCount; i++) {
             const angle = i * GOLDEN_ANGLE;
             const radius = Math.sqrt((i + 0.5) / visibleCount);
+            const cx = Math.cos(angle);
+            const cy = Math.sin(angle);
+
+            // Kéo phân bố từ đĩa tròn ra full hình chữ nhật (-1..1)²:
+            // nếu để nguyên đĩa tròn, vùng sát mép trên/dưới và 4 góc
+            // của màn hình dọc sẽ không bao giờ có ảnh
+            const stretch = 1 / Math.max(Math.abs(cx), Math.abs(cy));
 
             positions.push({
-                nx: Math.cos(angle) * radius,
-                ny: Math.sin(angle) * radius,
+                nx: cx * stretch * radius,
+                ny: cy * stretch * radius,
             });
         }
 
