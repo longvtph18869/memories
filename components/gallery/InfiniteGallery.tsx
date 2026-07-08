@@ -178,19 +178,11 @@ const createClothMaterial = () => {
     });
 };
 
-const PARTICLE_COUNT = 320;
+const PARTICLE_COUNT = 100;
 
-// Lớp bụi sáng/đom đóm lơ lửng giữa các tấm ảnh trong đường hầm 3D.
-// Trôi chậm theo scroll (parallax) + bập bềnh và nhấp nháy nhẹ theo thời gian.
-function FloatingParticles({
-    scrollVelocity,
-    globalOpacity,
-}: {
-    scrollVelocity: number;
-    globalOpacity: number;
-}) {
-    const scrollOffset = useRef(0);
-
+// Lớp bụi sáng lơ lửng: mỗi hạt đứng ở một độ sâu cố định, chỉ trôi nhẹ
+// trên màn hình và nhấp nháy — tồn tại mãi mãi, không bao giờ biến mất.
+function FloatingParticles({ globalOpacity }: { globalOpacity: number }) {
     const geometry = useMemo(() => {
         const positions = new Float32Array(PARTICLE_COUNT * 3);
         const sizes = new Float32Array(PARTICLE_COUNT);
@@ -199,10 +191,10 @@ function FloatingParticles({
 
         for (let i = 0; i < PARTICLE_COUNT; i++) {
             // x/y là tọa độ chuẩn hóa (-1.05..1.05) so với khung nhìn,
-            // shader sẽ đổi ra thế giới theo kích thước màn hình thực tế
+            // z là độ sâu CỐ ĐỊNH của hạt (không trôi theo scroll)
             positions[i * 3] = (Math.random() * 2 - 1) * 1.05;
             positions[i * 3 + 1] = (Math.random() * 2 - 1) * 1.05;
-            positions[i * 3 + 2] = Math.random() * 46;
+            positions[i * 3 + 2] = 6 + Math.random() * 20;
             sizes[i] = 8 + Math.random() * 22;
             phases[i] = Math.random() * Math.PI * 2;
             tints[i] = Math.random();
@@ -223,7 +215,6 @@ function FloatingParticles({
                 depthWrite: false,
                 uniforms: {
                     time: { value: 0 },
-                    scrollOffset: { value: 0 },
                     globalOpacity: { value: 1 },
                     uPixelRatio: { value: 1 },
                     uAspect: { value: 1 },
@@ -231,7 +222,6 @@ function FloatingParticles({
                 },
                 vertexShader: `
                     uniform float time;
-                    uniform float scrollOffset;
                     uniform float uPixelRatio;
                     uniform float uAspect;
                     uniform float uTanHalfFov;
@@ -244,12 +234,10 @@ function FloatingParticles({
                     void main() {
                         vTint = aTint;
 
-                        // Luôn ở phía TRƯỚC camera (dist 2..48) -> không bao giờ
-                        // biến mất sau lưng camera như trước
-                        float z = mod(position.z - scrollOffset, 46.0);
-                        float dist = z + 2.0;
+                        // Độ sâu cố định -> hạt sống mãi trên màn hình
+                        float dist = position.z;
 
-                        // Bập bềnh + bay lên chậm trong không gian chuẩn hóa
+                        // Bập bềnh + bay lên chậm; ra khỏi mép trên thì vòng về mép dưới
                         float nx = position.x + sin(time * 0.12 + aPhase) * 0.08;
                         float ny = mod(position.y + sin(time * 0.09 + aPhase * 1.7) * 0.06
                                        + time * 0.02 + 1.05, 2.1) - 1.05;
@@ -261,11 +249,8 @@ function FloatingParticles({
 
                         vec4 mvPosition = modelViewMatrix * vec4(world, 1.0);
 
-                        // Chỉ mờ nhẹ ở sát camera và tít xa
-                        float fade = smoothstep(2.0, 5.0, dist) * (1.0 - smoothstep(40.0, 47.0, dist));
-                        // Nhấp nháy nhẹ như đom đóm
-                        float twinkle = 0.4 + 0.6 * (0.5 + 0.5 * sin(time * 0.8 + aPhase * 3.0));
-                        vAlpha = fade * twinkle;
+                        // Nhấp nháy nhẹ như đom đóm (không bao giờ tắt hẳn)
+                        vAlpha = 0.4 + 0.6 * (0.5 + 0.5 * sin(time * 0.8 + aPhase * 3.0));
 
                         // Nhân pixel ratio: màn hình mobile mật độ điểm ảnh cao (2-3x),
                         // không nhân thì hạt chỉ nhỏ bằng 1/2-1/3 so với desktop
@@ -294,12 +279,9 @@ function FloatingParticles({
         []
     );
 
-    useFrame((state, delta) => {
-        // Ảnh trôi với hệ số *10, bụi trôi *4 -> chậm hơn tạo chiều sâu
-        scrollOffset.current += scrollVelocity * delta * 4;
+    useFrame((state) => {
         const cam = state.camera as THREE.PerspectiveCamera;
         material.uniforms.time.value = state.clock.getElapsedTime();
-        material.uniforms.scrollOffset.value = scrollOffset.current;
         material.uniforms.globalOpacity.value = globalOpacity;
         material.uniforms.uPixelRatio.value = state.gl.getPixelRatio();
         material.uniforms.uAspect.value = cam.aspect ?? 1;
@@ -308,25 +290,17 @@ function FloatingParticles({
         );
     });
 
-    // frustumCulled=false: vị trí thật của hạt do shader tính (wrap theo scroll),
+    // frustumCulled=false: vị trí thật của hạt do shader tính,
     // nếu để Three.js tự cắt theo khối bao gốc thì toàn bộ hạt bị loại không vẽ
     return <points geometry={geometry} material={material} frustumCulled={false} />;
 }
 
-const HEART_COUNT = 50;
-const STAR_COUNT = 120;
+const HEART_COUNT = 12;
+const STAR_COUNT = 30;
 
 // Trái tim hồng bay lên chầm chậm + ánh sao vàng lấp lánh (tia chữ thập).
-// Cả hai vẽ bằng shader trong cùng một lớp points -> chỉ 1 draw call.
-function HeartStarParticles({
-    scrollVelocity,
-    globalOpacity,
-}: {
-    scrollVelocity: number;
-    globalOpacity: number;
-}) {
-    const scrollOffset = useRef(0);
-
+// Mỗi hạt ở độ sâu cố định, sống mãi trên màn hình. Chỉ 1 draw call.
+function HeartStarParticles({ globalOpacity }: { globalOpacity: number }) {
     const geometry = useMemo(() => {
         const total = HEART_COUNT + STAR_COUNT;
         const positions = new Float32Array(total * 3);
@@ -338,10 +312,10 @@ function HeartStarParticles({
 
         for (let i = 0; i < total; i++) {
             const isStar = i >= HEART_COUNT;
-            // x/y chuẩn hóa theo khung nhìn, shader đổi ra thế giới
+            // x/y chuẩn hóa theo khung nhìn, z là độ sâu cố định
             positions[i * 3] = (Math.random() * 2 - 1) * 1.05;
             positions[i * 3 + 1] = (Math.random() * 2 - 1) * 1.05;
-            positions[i * 3 + 2] = Math.random() * 46;
+            positions[i * 3 + 2] = 6 + Math.random() * 20;
             sizes[i] = isStar ? 10 + Math.random() * 16 : 14 + Math.random() * 14;
             phases[i] = Math.random() * Math.PI * 2;
             tints[i] = Math.random();
@@ -366,7 +340,6 @@ function HeartStarParticles({
                 depthWrite: false,
                 uniforms: {
                     time: { value: 0 },
-                    scrollOffset: { value: 0 },
                     globalOpacity: { value: 1 },
                     uPixelRatio: { value: 1 },
                     uAspect: { value: 1 },
@@ -374,7 +347,6 @@ function HeartStarParticles({
                 },
                 vertexShader: `
                     uniform float time;
-                    uniform float scrollOffset;
                     uniform float uPixelRatio;
                     uniform float uAspect;
                     uniform float uTanHalfFov;
@@ -392,10 +364,8 @@ function HeartStarParticles({
                         vKind = aKind;
                         float isStar = step(0.5, aKind);
 
-                        // Luôn ở phía TRƯỚC camera (dist 2..48) -> không bao giờ
-                        // biến mất sau lưng camera như trước
-                        float z = mod(position.z - scrollOffset, 46.0);
-                        float dist = z + 2.0;
+                        // Độ sâu cố định -> tim/sao sống mãi trên màn hình
+                        float dist = position.z;
 
                         // Tim: bay lên nhẹ nhàng (mỗi chiếc một tốc độ), lắc lư như
                         // trôi trong gió; sao: gần như đứng yên trên nền trời
@@ -412,14 +382,11 @@ function HeartStarParticles({
 
                         vec4 mvPosition = modelViewMatrix * vec4(world, 1.0);
 
-                        // Chỉ mờ nhẹ ở sát camera và tít xa
-                        float fade = smoothstep(2.0, 5.0, dist) * (1.0 - smoothstep(40.0, 47.0, dist));
-
                         // Tim mờ/tỏ dịu dàng; sao nhấp nháy nhanh và sâu hơn
+                        // (cả hai không bao giờ tắt hẳn)
                         float heartPulse = 0.7 + 0.3 * (0.5 + 0.5 * sin(time * 0.7 + aPhase * 2.0));
                         float starTwinkle = pow(0.5 + 0.5 * sin(time * 2.2 + aPhase * 5.0), 2.0);
-                        float twinkle = mix(heartPulse, 0.35 + 0.65 * starTwinkle, isStar);
-                        vAlpha = fade * twinkle;
+                        vAlpha = mix(heartPulse, 0.35 + 0.65 * starTwinkle, isStar);
 
                         // Sao phồng/xẹp theo nhịp lấp lánh
                         float sizePulse = mix(1.0, 0.6 + 0.8 * starTwinkle, isStar);
@@ -468,12 +435,9 @@ function HeartStarParticles({
         []
     );
 
-    useFrame((state, delta) => {
-        // Trôi theo scroll chậm hơn ảnh (parallax), cùng nhịp với lớp bụi
-        scrollOffset.current += scrollVelocity * delta * 4;
+    useFrame((state) => {
         const cam = state.camera as THREE.PerspectiveCamera;
         material.uniforms.time.value = state.clock.getElapsedTime();
-        material.uniforms.scrollOffset.value = scrollOffset.current;
         material.uniforms.globalOpacity.value = globalOpacity;
         material.uniforms.uPixelRatio.value = state.gl.getPixelRatio();
         material.uniforms.uAspect.value = cam.aspect ?? 1;
@@ -854,14 +818,8 @@ function GalleryScene({
 
     return (
         <>
-            <FloatingParticles
-                scrollVelocity={scrollVelocity}
-                globalOpacity={globalOpacity}
-            />
-            <HeartStarParticles
-                scrollVelocity={scrollVelocity}
-                globalOpacity={globalOpacity}
-            />
+            <FloatingParticles globalOpacity={globalOpacity} />
+            <HeartStarParticles globalOpacity={globalOpacity} />
             {initialPlanes.map((_, i) => {
                 const plane = planesData.current[i];
                 if (!plane) return null;
