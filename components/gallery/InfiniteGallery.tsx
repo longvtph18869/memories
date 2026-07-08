@@ -223,10 +223,12 @@ function FloatingParticles({
                     time: { value: 0 },
                     scrollOffset: { value: 0 },
                     globalOpacity: { value: 1 },
+                    uPixelRatio: { value: 1 },
                 },
                 vertexShader: `
                     uniform float time;
                     uniform float scrollOffset;
+                    uniform float uPixelRatio;
                     attribute float aSize;
                     attribute float aPhase;
                     attribute float aTint;
@@ -255,7 +257,9 @@ function FloatingParticles({
                         float twinkle = 0.4 + 0.6 * (0.5 + 0.5 * sin(time * 0.8 + aPhase * 3.0));
                         vAlpha = fade * twinkle;
 
-                        gl_PointSize = min(aSize * (10.0 / dist), 42.0);
+                        // Nhân pixel ratio: màn hình mobile mật độ điểm ảnh cao (2-3x),
+                        // không nhân thì hạt chỉ nhỏ bằng 1/2-1/3 so với desktop
+                        gl_PointSize = min(aSize * (10.0 / dist), 42.0) * uPixelRatio;
                         gl_Position = projectionMatrix * mvPosition;
                     }
                 `,
@@ -286,6 +290,7 @@ function FloatingParticles({
         material.uniforms.time.value = state.clock.getElapsedTime();
         material.uniforms.scrollOffset.value = scrollOffset.current;
         material.uniforms.globalOpacity.value = globalOpacity;
+        material.uniforms.uPixelRatio.value = state.gl.getPixelRatio();
     });
 
     // frustumCulled=false: vị trí thật của hạt do shader tính (wrap theo scroll),
@@ -347,10 +352,12 @@ function HeartStarParticles({
                     time: { value: 0 },
                     scrollOffset: { value: 0 },
                     globalOpacity: { value: 1 },
+                    uPixelRatio: { value: 1 },
                 },
                 vertexShader: `
                     uniform float time;
                     uniform float scrollOffset;
+                    uniform float uPixelRatio;
                     attribute float aSize;
                     attribute float aPhase;
                     attribute float aTint;
@@ -388,7 +395,8 @@ function HeartStarParticles({
 
                         // Sao phồng/xẹp theo nhịp lấp lánh
                         float sizePulse = mix(1.0, 0.6 + 0.8 * starTwinkle, isStar);
-                        gl_PointSize = min(aSize * (10.0 / dist) * sizePulse, 48.0);
+                        // Nhân pixel ratio để tim/sao trên mobile to bằng desktop
+                        gl_PointSize = min(aSize * (10.0 / dist) * sizePulse, 48.0) * uPixelRatio;
                         gl_Position = projectionMatrix * mvPosition;
                     }
                 `,
@@ -438,6 +446,7 @@ function HeartStarParticles({
         material.uniforms.time.value = state.clock.getElapsedTime();
         material.uniforms.scrollOffset.value = scrollOffset.current;
         material.uniforms.globalOpacity.value = globalOpacity;
+        material.uniforms.uPixelRatio.value = state.gl.getPixelRatio();
     });
 
     // frustumCulled=false: vị trí thật của hạt do shader tính (wrap theo scroll),
