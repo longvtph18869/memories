@@ -178,6 +178,119 @@ const createClothMaterial = () => {
     });
 };
 
+const PARTICLE_COUNT = 140;
+
+// Lớp bụi sáng/đom đóm lơ lửng giữa các tấm ảnh trong đường hầm 3D.
+// Trôi chậm theo scroll (parallax) + bập bềnh và nhấp nháy nhẹ theo thời gian.
+function FloatingParticles({
+    scrollVelocity,
+    globalOpacity,
+}: {
+    scrollVelocity: number;
+    globalOpacity: number;
+}) {
+    const scrollOffset = useRef(0);
+
+    const geometry = useMemo(() => {
+        const positions = new Float32Array(PARTICLE_COUNT * 3);
+        const sizes = new Float32Array(PARTICLE_COUNT);
+        const phases = new Float32Array(PARTICLE_COUNT);
+        const tints = new Float32Array(PARTICLE_COUNT);
+
+        for (let i = 0; i < PARTICLE_COUNT; i++) {
+            positions[i * 3] = (Math.random() * 2 - 1) * 14;
+            positions[i * 3 + 1] = (Math.random() * 2 - 1) * 10;
+            positions[i * 3 + 2] = Math.random() * DEFAULT_DEPTH_RANGE;
+            sizes[i] = 6 + Math.random() * 18;
+            phases[i] = Math.random() * Math.PI * 2;
+            tints[i] = Math.random();
+        }
+
+        const g = new THREE.BufferGeometry();
+        g.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        g.setAttribute('aSize', new THREE.BufferAttribute(sizes, 1));
+        g.setAttribute('aPhase', new THREE.BufferAttribute(phases, 1));
+        g.setAttribute('aTint', new THREE.BufferAttribute(tints, 1));
+        return g;
+    }, []);
+
+    const material = useMemo(
+        () =>
+            new THREE.ShaderMaterial({
+                transparent: true,
+                depthWrite: false,
+                uniforms: {
+                    time: { value: 0 },
+                    scrollOffset: { value: 0 },
+                    globalOpacity: { value: 1 },
+                },
+                vertexShader: `
+                    uniform float time;
+                    uniform float scrollOffset;
+                    attribute float aSize;
+                    attribute float aPhase;
+                    attribute float aTint;
+                    varying float vAlpha;
+                    varying float vTint;
+
+                    void main() {
+                        vTint = aTint;
+                        vec3 pos = position;
+
+                        // Bập bềnh nhẹ + bay lên chậm (wrap trong khoảng -10..10)
+                        pos.x += sin(time * 0.12 + aPhase) * 1.2;
+                        pos.y = mod(pos.y + sin(time * 0.09 + aPhase * 1.7) * 0.9
+                                    + time * 0.15 + 10.0, 20.0) - 10.0;
+
+                        // Trôi theo scroll với tốc độ chậm hơn ảnh -> hiệu ứng parallax
+                        float z = mod(pos.z + scrollOffset, ${DEFAULT_DEPTH_RANGE.toFixed(1)});
+                        pos.z = z - ${(DEFAULT_DEPTH_RANGE / 2).toFixed(1)};
+
+                        vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
+                        float dist = max(-mvPosition.z, 0.001);
+
+                        // Mờ dần khi quá gần camera hoặc quá xa
+                        float fade = smoothstep(1.5, 6.0, dist) * (1.0 - smoothstep(30.0, 48.0, dist));
+                        // Nhấp nháy nhẹ như đom đóm
+                        float twinkle = 0.4 + 0.6 * (0.5 + 0.5 * sin(time * 0.8 + aPhase * 3.0));
+                        vAlpha = fade * twinkle;
+
+                        gl_PointSize = min(aSize * (10.0 / dist), 42.0);
+                        gl_Position = projectionMatrix * mvPosition;
+                    }
+                `,
+                fragmentShader: `
+                    uniform float globalOpacity;
+                    varying float vAlpha;
+                    varying float vTint;
+
+                    void main() {
+                        float d = distance(gl_PointCoord, vec2(0.5));
+                        float disc = 1.0 - smoothstep(0.15, 0.5, d);
+
+                        // Màu bụi nắng: từ cam đất trầm tới vàng sáng
+                        vec3 warmDark = vec3(0.72, 0.50, 0.28);
+                        vec3 warmLight = vec3(1.0, 0.92, 0.75);
+                        vec3 color = mix(warmDark, warmLight, vTint);
+
+                        gl_FragColor = vec4(color, disc * vAlpha * 0.45 * globalOpacity);
+                    }
+                `,
+            }),
+        []
+    );
+
+    useFrame((state, delta) => {
+        // Ảnh trôi với hệ số *10, bụi trôi *4 -> chậm hơn tạo chiều sâu
+        scrollOffset.current += scrollVelocity * delta * 4;
+        material.uniforms.time.value = state.clock.getElapsedTime();
+        material.uniforms.scrollOffset.value = scrollOffset.current;
+        material.uniforms.globalOpacity.value = globalOpacity;
+    });
+
+    return <points geometry={geometry} material={material} />;
+}
+
 function ImagePlane({
     texture,
     position,
@@ -293,6 +406,17 @@ function GalleryScene({
     const totalImages = normalizedImages.length;
     const depthRange = DEFAULT_DEPTH_RANGE;
 
+    // Thứ tự ảnh ban đầu được xáo trộn ngẫu nhiên (Fisher–Yates)
+    // để ảnh không hiện lần lượt theo đúng thứ tự trong mảng đầu vào
+    const shuffledOrder = useMemo(() => {
+        const order = Array.from({ length: totalImages }, (_, i) => i);
+        for (let i = order.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [order[i], order[j]] = [order[j], order[i]];
+        }
+        return order;
+    }, [totalImages]);
+
     const cameraFov =
         (camera as THREE.PerspectiveCamera).fov ?? 55;
     const cameraAspect = size.height > 0 ? size.width / size.height : 1;
@@ -312,7 +436,7 @@ function GalleryScene({
             return {
                 index: i,
                 z,
-                imageIndex: totalImages > 0 ? i % totalImages : 0,
+                imageIndex: totalImages > 0 ? shuffledOrder[i % totalImages] : 0,
                 x: offset.x,
                 y: offset.y,
             };
@@ -331,12 +455,12 @@ function GalleryScene({
             return {
                 index: i,
                 z,
-                imageIndex: totalImages > 0 ? i % totalImages : 0,
+                imageIndex: totalImages > 0 ? shuffledOrder[i % totalImages] : 0,
                 x: 0,
                 y: 0,
             };
         });
-    }, [depthRange, spatialPositions, totalImages, visibleCount]);
+    }, [depthRange, spatialPositions, totalImages, visibleCount, shuffledOrder]);
 
     // Handle scroll input
     const handleWheel = useCallback(
@@ -407,31 +531,40 @@ function GalleryScene({
         });
 
         // Update plane positions
-        const imageAdvance =
-            totalImages > 0 ? visibleCount % totalImages || totalImages : 0;
         const totalRange = depthRange;
+
+        // Bốc ngẫu nhiên một ảnh chưa hiển thị trên màn hình (tránh trùng);
+        // nếu ảnh ít hơn số plane thì chỉ cần khác ảnh hiện tại
+        const pickRandomImage = (current: number) => {
+            if (totalImages <= 1) return current;
+            const inUse = new Set(
+                planesData.current.map((p) => p.imageIndex)
+            );
+            const candidates: number[] = [];
+            for (let idx = 0; idx < totalImages; idx++) {
+                if (!inUse.has(idx)) candidates.push(idx);
+            }
+            if (candidates.length === 0) {
+                const idx = Math.floor(Math.random() * totalImages);
+                return idx === current ? (idx + 1) % totalImages : idx;
+            }
+            return candidates[Math.floor(Math.random() * candidates.length)];
+        };
 
         planesData.current.forEach((plane, i) => {
             let newZ = plane.z + scrollVelocity * delta * 10;
-            let wrapsForward = 0;
-            let wrapsBackward = 0;
+            let wrapped = false;
 
             if (newZ >= totalRange) {
-                wrapsForward = Math.floor(newZ / totalRange);
-                newZ -= totalRange * wrapsForward;
+                newZ -= totalRange * Math.floor(newZ / totalRange);
+                wrapped = true;
             } else if (newZ < 0) {
-                wrapsBackward = Math.ceil(-newZ / totalRange);
-                newZ += totalRange * wrapsBackward;
+                newZ += totalRange * Math.ceil(-newZ / totalRange);
+                wrapped = true;
             }
 
-            if (wrapsForward > 0 && imageAdvance > 0 && totalImages > 0) {
-                plane.imageIndex =
-                    (plane.imageIndex + wrapsForward * imageAdvance) % totalImages;
-            }
-
-            if (wrapsBackward > 0 && imageAdvance > 0 && totalImages > 0) {
-                const step = plane.imageIndex - wrapsBackward * imageAdvance;
-                plane.imageIndex = ((step % totalImages) + totalImages) % totalImages;
+            if (wrapped && totalImages > 0) {
+                plane.imageIndex = pickRandomImage(plane.imageIndex);
             }
 
             plane.z = ((newZ % totalRange) + totalRange) % totalRange;
@@ -525,6 +658,10 @@ function GalleryScene({
 
     return (
         <>
+            <FloatingParticles
+                scrollVelocity={scrollVelocity}
+                globalOpacity={globalOpacity}
+            />
             {initialPlanes.map((_, i) => {
                 const plane = planesData.current[i];
                 if (!plane) return null;

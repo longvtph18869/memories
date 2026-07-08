@@ -82,7 +82,7 @@ export default function Home() {
 
   if (!showGallery) {
     return (
-      <main className="min-h-screen bg-background flex items-center justify-center">
+      <main className="min-h-screen bg-sunset flex items-center justify-center">
         <div className="text-center">
           <p className="text-[11px] uppercase tracking-[0.3em] text-foreground-muted mb-2">Đang tải kỷ niệm...</p>
           {totalCount > 0 && (
@@ -97,7 +97,7 @@ export default function Home() {
 
   if (images.length === 0) {
     return (
-      <main className="min-h-screen bg-background flex items-center justify-center">
+      <main className="min-h-screen bg-sunset flex items-center justify-center">
         <div className="text-center space-y-4">
           <p className="text-[11px] uppercase tracking-[0.3em] text-foreground-muted">Chưa có kỷ niệm nào</p>
         </div>
@@ -115,9 +115,13 @@ export default function Home() {
   });
 
   return (
-    <main className="min-h-screen bg-background">
+    <main className="min-h-screen bg-sunset">
+      {/* Lớp không khí phim nhựa: vignette + film grain */}
+      <div className="vignette-overlay" aria-hidden />
+      <div className="grain-overlay" aria-hidden />
+
       <div
-        className={`fixed inset-0 z-50 flex items-center justify-center bg-background text-foreground transition-opacity duration-[4000ms] ${galleryOpacity === 1 ? "opacity-0 pointer-events-none" : "opacity-100"
+        className={`fixed inset-0 z-50 flex items-center justify-center bg-sunset text-foreground transition-opacity duration-[4000ms] ${galleryOpacity === 1 ? "opacity-0 pointer-events-none" : "opacity-100"
           }`}
       >
         <div className="text-center">
